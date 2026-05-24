@@ -1,74 +1,85 @@
 //
 //  ContentView.swift
-//  PlaylistCurator macOS App
-//
-//  Created by Andrew Finke on 7/22/19.
-//  Copyright © 2019 Andrew Finke. All rights reserved.
+//  PlaylistCurator-AppleMusic
 //
 
 import SwiftUI
 
-struct AlbumView: View {
-    var image: Image
+private struct AlbumView: View {
+    let image: Image?
 
     var body: some View {
-        image.resizable()
-            .frame(width: 60, height: 60)
+        Group {
+            if let image {
+                image.resizable()
+            } else {
+                Rectangle()
+                    .fill(.tertiary)
+                    .overlay(
+                        Image(systemName: "music.note")
+                            .foregroundStyle(.secondary)
+                            .font(.title2)
+                    )
+            }
+        }
+        .frame(width: 60, height: 60)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 }
 
-struct ButtonLabelView: View {
+private struct ActionButton: View {
     let color: Color
+    let enabled: Bool
+    let action: () -> Void
+
     var body: some View {
-        ZStack {
+        Button(action: action) {
             Circle()
-                .foregroundColor(color)
-                .frame(width: 16)
+                .fill(enabled ? color : Color.gray.opacity(0.4))
+                .frame(width: 16, height: 16)
         }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(!enabled)
     }
 }
 
 struct ContentView: View {
 
-    var manager: SpotifyManager
+    var manager: MusicAppManager
 
     var body: some View {
-        VStack {
-            HStack {
-                VStack {
-                    Button(action: {
-                        Task(priority: .userInitiated) {
-                            await self.manager.keepTrack()
-                        }
-                    }, label: {
-                        ButtonLabelView(color: Color(.sRGB,
-                                                     red: 100.0 / 255.0,
-                                                     green: 210.0 / 255.0,
-                                                     blue: 110.0 / 255.0))
-                    })
-                    .buttonStyle(PlainButtonStyle())
-                    Spacer()
-                    Button(action: {
-                        Task(priority: .userInitiated) {
-                            await self.manager.removeTrack()
-                        }
-                    }, label: {
-                        ButtonLabelView(color: Color.red)
-                    })
-                    .buttonStyle(PlainButtonStyle())
-                }.frame(height: 40)
-                    .padding(.trailing, 2)
-
-                manager.nowPlayingTrackImage.map { image in
-                    Button(action: {
-                        Task(priority: .userInitiated) {
-                            await self.manager.reloadNowPlaying()
-                        }
-                    }, label: {
-                        AlbumView(image: image)
-                    }).buttonStyle(PlainButtonStyle())
-
+        HStack(spacing: 8) {
+            VStack {
+                ActionButton(color: Color(red: 100/255, green: 210/255, blue: 110/255),
+                             enabled: true) {
+                    Task(priority: .userInitiated) { await manager.keepTrack() }
                 }
+                Spacer()
+                ActionButton(color: .red,
+                             enabled: manager.isRemovable) {
+                    Task(priority: .userInitiated) { await manager.removeTrack() }
+                }
+            }
+            .frame(height: 40)
+            .padding(.trailing, 2)
+
+            Button {
+                Task(priority: .userInitiated) { await manager.seekToMidpoint() }
+            } label: {
+                AlbumView(image: manager.nowPlayingTrackImage)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help(manager.nowPlayingTrackName + " — " + manager.nowPlayingSourceName + "  (tap to skip to 50%)")
+        }
+        .padding(8)
+        .overlay(alignment: .bottom) {
+            if case .failed(let msg) = manager.lastActionFlash {
+                Text(msg)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+                    .padding(.horizontal, 4)
+                    .padding(.bottom, 2)
             }
         }
     }
